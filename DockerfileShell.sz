@@ -1,0 +1,111 @@
+# Inherit from Heroku's stack
+FROM heroku/heroku:16
+
+# Internally, we arbitrarily use port 3000 Step 2/35
+ENV PORT 3000
+
+# Which versions? Step 3-7/35
+ENV PHP_VERSION 7.0.10
+ENV HTTPD_VERSION 2.4.20
+ENV NGINX_VERSION 1.8.1
+ENV COMPOSER_VERSION 1.2.1
+ENV NODE_ENGINE 8.8.1
+# Step 8/35
+ENV PATH /app/heroku/node/bin:/app/user/node_modules/.bin:$PATH
+
+# Create some needed directories Step 9-10/35
+RUN mkdir -p /app/.heroku/php /app/heroku/node /app/.profile.d
+WORKDIR /app/user
+
+# so we can run PHP in here Step 11/35
+ENV PATH /app/.heroku/php/bin:/app/.heroku/php/sbin:$PATH
+
+# Install Apache Step 12-13/35
+RUN curl --silent --location https://lang-php.s3.amazonaws.com/dist-cedar-16-stable/apache-$HTTPD_VERSION.tar.gz | tar xz -C /app/.heroku/php
+# Config
+RUN curl --silent --location https://raw.githubusercontent.com/heroku/heroku-buildpack-php/5a770b914549cf2a897cbbaf379eb5adf410d464/conf/apache2/httpd.conf.default > /app/.heroku/php/etc/apache2/httpd.conf
+# FPM socket permissions workaround when run as root Step 14/35
+RUN echo "\n\
+Group root\n\
+" >> /app/.heroku/php/etc/apache2/httpd.conf
+
+# Install Nginx Step 15/35
+RUN curl --silent --location https://lang-php.s3.amazonaws.com/dist-cedar-16-stable/nginx-$NGINX_VERSION.tar.gz | tar xz -C /app/.heroku/php
+# Config # Install Nginx Step 16/35
+RUN curl --silent --location https://raw.githubusercontent.com/heroku/heroku-buildpack-php/5a770b914549cf2a897cbbaf379eb5adf410d464/conf/nginx/nginx.conf.default > /app/.heroku/php/etc/nginx/nginx.conf
+# FPM socket permissions workaround when run as root Step 17/35
+RUN echo "\n\
+user nobody root;\n\
+" >> /app/.heroku/php/etc/nginx/nginx.conf
+
+# Install PHP Step 18/35
+RUN curl --silent --location https://lang-php.s3.amazonaws.com/dist-cedar-16-stable/php-$PHP_VERSION.tar.gz | tar xz -C /app/.heroku/php
+# Config Step 19-20/35
+RUN mkdir -p /app/.heroku/php/etc/php/conf.d
+RUN curl --silent --location https://raw.githubusercontent.com/heroku/heroku-buildpack-php/master/support/build/_conf/php/php.ini > /app/.heroku/php/etc/php/php.ini
+
+# Install Redis extension for PHP 7 Step 21/35
+RUN curl --silent --location https://lang-php.s3.amazonaws.com/dist-cedar-16-stable/extensions/no-debug-non-zts-20151012/redis-3.0.0.tar.gz | tar xz -C /app/.heroku/php
+
+# Enable all optional exts Step 22/35
+RUN echo "\n\
+user_ini.cache_ttl = 30 \n\
+opcache.enable_cli = 1 \n\
+opcache.validate_timestamps = 1 \n\
+opcache.revalidate_freq = 0 \n\
+opcache.fast_shutdown = 0 \n\
+extension=bcmath.so \n\
+extension=calendar.so \n\
+extension=exif.so \n\
+extension=ftp.so \n\
+extension=gd.so \n\
+extension=gettext.so \n\
+extension=intl.so \n\
+extension=mbstring.so \n\
+extension=pcntl.so \n\
+extension=redis.so \n\
+extension=shmop.so \n\
+extension=soap.so \n\
+extension=sqlite3.so \n\
+extension=pdo_sqlite.so \n\
+extension=xmlrpc.so \n\
+extension=xsl.so\n\
+" >> /app/.heroku/php/etc/php/php.ini
+
+# Enable timestamps validation for opcache for development Step 23/35
+RUN sed -i /opcache.validate_timestamps/d /app/.heroku/php/etc/php/conf.d/010-ext-zend_opcache.ini
+
+# Install Composer Step 24-25/35
+RUN curl --silent --location https://lang-php.s3.amazonaws.com/dist-cedar-16-stable/composer-$COMPOSER_VERSION.tar.gz | tar xz -C /app/.heroku/php
+RUN composer self-update
+
+# Install Node.js Step 26/35
+RUN curl -s https://s3pository.heroku.com/node/v$NODE_ENGINE/node-v$NODE_ENGINE-linux-x64.tar.gz | tar --strip-components=1 -xz -C /app/heroku/node
+
+# Export the node path in .profile.d Step 27/35
+RUN echo "export PATH=\"/app/heroku/node/bin:/app/user/node_modules/.bin:\$PATH\"" > /app/.profile.d/nodejs.sh
+
+# Install yarn package manager npm WARN deprecated yarn@1.3.2: It is recommended to install Yarn using the native installation method for your environment. See https://yarnpkg.com/en/docs/install Step 28/35
+RUN npm install --global yarn
+
+# copy dep files first so Docker caches the install step if they don't change Step 29-30/35
+ONBUILD COPY ./aszupload/composer.lock /app/user/
+ONBUILD COPY ./aszupload/composer.json /app/user/
+# run install but without scripts as we don't have the app source yet Step 31/35
+ONBUILD RUN composer install --no-scripts
+# require the buildpack for execution Step 32/35
+ONBUILD RUN composer show --installed heroku/heroku-buildpack-php || { echo 'Your composer.json must have "heroku/heroku-buildpack-php" as a "require-dev" dependency.'; exit 1; }
+# rest of app Step 33/35
+ONBUILD COPY ./aszupload/wp-cli.yml /app/user/
+ONBUILD COPY ./aszupload/szhphpbuild.env /app/user/
+# run install hooks Step 34/35
+ONBUILD RUN cat composer.json | python -c 'import sys,json; sys.exit("post-install-cmd" not in json.load(sys.stdin).get("scripts", {}));' && composer run-script post-install-cmd || true
+
+# Export heroku bin Step 35/35
+ENV PATH /app/user/bin:$PATH
+# sz adds
+ONBUILD COPY ./aszupload/phpcs.xml /app/user/
+
+# ONBUILD RUN  apt-get update && apt-get install -y software-properties-common && add-apt-repository -y ppa:webupd8team/unstable && apt-get install -y mc
+
+# WARNING: Image for service shell was built because it did not already exist. To rebuild this image you must use `docker-compose build` or `docker-compose up --build`.

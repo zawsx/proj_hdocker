@@ -1,0 +1,45 @@
+{
+  "name": "sz/wpHGproject",
+  "description": "wp HG proj template for Heroku and local Docker sz171227",
+  "type": "project",
+  "license": "GPLv3",
+  "authors": [
+    {
+      "name": "Chris Setz",
+      "email": "s728cj@setz.gq"
+    }
+  ],
+  "repositories": [
+    {      "type": "composer",      "url": "https://wpackagist.org"    },
+    {      "type": "composer",      "url": "https://wp-languages.github.io"    }
+  ],
+  "require": {    "php": ">=7.0",    "ext-gd": "*",    "ext-redis": "*",    "johnpbloch/wordpress": "*",    "composer/installers": "v1.0.12",    "vlucas/phpdotenv": "^2.0.1",
+    "oscarotero/env": "^1.0",    "wp-cli/wp-cli" : "*",    "koodimonni/composer-dropin-installer": "*",    "wpackagist-theme/twentyseventeen": "*",
+    "wpackagist-theme/responsive": "*"	
+  },
+  "require-dev": {"heroku/heroku-buildpack-php": "*" },
+  "extra": {
+    "installer-paths": {
+      "htdocs/wp-content/plugins/{$name}/": ["type:wordpress-plugin"],
+      "htdocs/wp-content/mu-plugins/{$name}/": ["type:wordpress-muplugin"],
+      "htdocs/wp-content/themes/{$name}": ["type:wordpress-theme"]
+    },
+    "dropin-paths": {
+      "htdocs/wp-content/languages/": ["vendor:koodimonni-language"],
+      "htdocs/wp-content/languages/plugins/": ["vendor:koodimonni-plugin-language"],
+      "htdocs/wp-content/languages/themes/": ["vendor:koodimonni-theme-language"]
+    },
+    "wordpress-install-dir": "htdocs/wordpress"
+  },
+  "scripts": {
+    "pre-install-cmd": [
+      "test -f /app/.heroku/mysql-client-core.deb || wget http://security.ubuntu.com/ubuntu/pool/main/m/mysql-5.7/mysql-client-core-5.7_5.7.20-0ubuntu0.16.04.1_amd64.deb -qO /app/.heroku/mysql-client-core.deb",
+      "test -f /app/.heroku/mysql-core.deb || wget http://security.ubuntu.com/ubuntu/pool/main/m/mysql-5.7/mysql-client-5.7_5.7.20-0ubuntu0.16.04.1_amd64.deb -qO /app/.heroku/mysql-client.deb",
+      "dpkg -x /app/.heroku/mysql-client.deb /app/.heroku/mysql; dpkg -x /app/.heroku/mysql-client-core.deb /app/.heroku/mysql",
+      "chmod +x /app/.heroku/mysql/usr/bin/* && mv /app/.heroku/mysql/usr/bin/* /app/.heroku/php/bin/"
+    ],
+    "post-install-cmd": [
+      "/bin/bash -c \"rm -r htdocs/wordpress/wp-content; ln -s ../wp-content htdocs/wordpress/wp-content\""
+    ]
+  }
+}

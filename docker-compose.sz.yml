@@ -1,0 +1,69 @@
+version: '3'
+services:
+  web:
+    build:
+      context: .
+#      dockerfile: ./DockerfileWeb.sz
+    labels:
+        sz.webprojhg.description: "heroku php web image"
+    image: herokuphp
+    command: 'bash -c "source aszupload/szhphpbuild.env && tools/sz_start-web.sh"'
+    working_dir: /app/user
+    ports:
+      - 8080:8080
+    volumes:
+      - .:/app/user:rw,cached
+    links:
+      - mysql
+      - redis
+    environment:
+      - VIRTUAL_HOST=wp.sz
+
+  shell:
+    build:
+      context: .
+      dockerfile: ./DockerfileShell.sz
+    labels:
+        sz.shellprojhg.description: "heroku php shell image"
+
+# builds 573MB
+    image: herokuphp
+    command: 'bash -c "source aszupload/szhphpbuild.env && bash"'
+    working_dir: /app/user
+    volumes:
+      - .:/app/user:rw,cached
+    links:
+      - mysql
+      - redis
+
+  ci:
+    build:
+      context: .
+    image: herokuphp
+    command: bash tools/ci.sh
+    working_dir: /app/user
+    volumes:
+      - .:/app/user:rw,cached
+    links:
+      - mysql
+      - redis
+# these two images are pulled and created with no tags
+  mysql:
+    image: mysql:latest
+    volumes:
+      - mysqldata:/var/lib/mysql
+    ports:
+      - 3306:3306
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: password
+
+  redis:
+    image: redis:3.2
+    ports:
+      - 6379:6379
+
+volumes:
+  mysqldata: {}
